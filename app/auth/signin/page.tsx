@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Spinner } from '@/components/ui/spinner'
 import { Database, Lock } from 'lucide-react'
 import { toast, Toaster } from 'sonner'
 
@@ -29,8 +30,14 @@ export default function SignIn() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <Database className="h-12 w-12 text-primary mx-auto mb-4 animate-pulse" />
-          <p className="text-muted-foreground">Loading...</p>
+          <div className="flex justify-center mb-4">
+            <div className="flex items-center space-x-2">
+              <Database className="h-8 w-8 text-primary animate-pulse" />
+              <Lock className="h-6 w-6 text-muted-foreground animate-pulse" />
+            </div>
+          </div>
+          <Spinner size="lg" className="mb-4" />
+          <p className="text-muted-foreground">Checking authentication...</p>
         </div>
       </div>
     )
@@ -98,6 +105,7 @@ export default function SignIn() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={isLoading}
               />
             </div>
             <div className="space-y-2">
@@ -109,6 +117,7 @@ export default function SignIn() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                disabled={isLoading}
               />
             </div>
             <Button
@@ -116,7 +125,14 @@ export default function SignIn() {
               className="w-full"
               disabled={isLoading}
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? (
+                <div className="flex items-center space-x-2">
+                  <Spinner size="sm" className="border-white border-t-transparent" />
+                  <span>Signing in...</span>
+                </div>
+              ) : (
+                'Sign In'
+              )}
             </Button>
           </form>
           

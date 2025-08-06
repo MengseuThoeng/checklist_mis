@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
+import { Spinner } from '@/components/ui/spinner'
 import { Calendar, Database, Edit, Trash2, Plus, CheckCircle, XCircle, Clock, LogOut, User } from 'lucide-react'
 import { toast, Toaster } from 'sonner'
 
@@ -42,6 +43,9 @@ export default function Home() {
   const [entries, setEntries] = useState<ChecklistEntry[]>([])
   const [activeTab, setActiveTab] = useState<string>('all')
   const [editingEntry, setEditingEntry] = useState<ChecklistEntry | null>(null)
+  const [isLoadingServers, setIsLoadingServers] = useState(true)
+  const [isLoadingEntries, setIsLoadingEntries] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     serverId: '',
     tableName: '',
@@ -53,6 +57,7 @@ export default function Home() {
   })
 
   useEffect(() => {
+    setIsLoadingServers(true)
     fetch('/api/servers')
       .then(res => res.json())
       .then(data => {
@@ -61,13 +66,16 @@ export default function Home() {
           setActiveTab('all')
         }
       })
+      .finally(() => setIsLoadingServers(false))
   }, [activeTab])
 
   useEffect(() => {
     if (selectedDate) {
+      setIsLoadingEntries(true)
       fetch(`/api/checklist?date=${selectedDate}`)
         .then(res => res.json())
         .then(data => setEntries(data))
+        .finally(() => setIsLoadingEntries(false))
     }
   }, [selectedDate])
 
@@ -84,6 +92,8 @@ export default function Home() {
       return
     }
     
+    setIsSubmitting(true)
+    
     try {
       const url = editingEntry ? `/api/checklist/${editingEntry.id}` : '/api/checklist'
       const method = editingEntry ? 'PUT' : 'POST'
@@ -98,9 +108,11 @@ export default function Home() {
       })
 
       if (response.ok) {
+        setIsLoadingEntries(true)
         const updatedEntries = await fetch(`/api/checklist?date=${selectedDate}`)
           .then(res => res.json())
         setEntries(updatedEntries)
+        setIsLoadingEntries(false)
         
         toast.success(editingEntry ? 'Entry updated successfully!' : 'Entry added successfully!')
         
@@ -121,6 +133,8 @@ export default function Home() {
     } catch (error) {
       toast.error('Network error. Please check your connection.')
       console.error('Error submitting form:', error)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -146,9 +160,11 @@ export default function Home() {
       })
 
       if (response.ok) {
+        setIsLoadingEntries(true)
         const updatedEntries = await fetch(`/api/checklist?date=${selectedDate}`)
           .then(res => res.json())
         setEntries(updatedEntries)
+        setIsLoadingEntries(false)
         toast.success('Entry deleted successfully!')
       } else {
         toast.error('Failed to delete entry')
@@ -218,8 +234,16 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <Database className="h-12 w-12 text-primary mx-auto mb-4 animate-pulse" />
-          <p className="text-muted-foreground">Loading...</p>
+          <div className="flex justify-center mb-4">
+            <div className="flex items-center space-x-2">
+              <Database className="h-12 w-12 text-primary animate-pulse" />
+              <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]" />
+              <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:-0.15s]" />
+              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" />
+            </div>
+          </div>
+          <Spinner size="lg" className="mb-4" />
+          <p className="text-muted-foreground animate-pulse">Loading your dashboard...</p>
         </div>
       </div>
     )
@@ -280,15 +304,23 @@ export default function Home() {
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
                   className="w-auto"
+                  disabled={isLoadingEntries}
                 />
-                <Badge variant="secondary">
-                  {entries.length} entries
-                </Badge>
+                {isLoadingEntries ? (
+                  <div className="flex items-center space-x-2">
+                    <Spinner size="sm" />
+                    <span className="text-sm text-muted-foreground">Loading...</span>
+                  </div>
+                ) : (
+                  <Badge variant="secondary">
+                    {entries.length} entries
+                  </Badge>
+                )}
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 items-end">
+            <form onSubmit={handleSubmit} className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 items-end transition-opacity ${isSubmitting ? 'opacity-70 pointer-events-none' : ''}`}>
               {/* Server Selection */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">
@@ -298,16 +330,23 @@ export default function Home() {
                   value={formData.serverId}
                   onValueChange={(value) => setFormData({...formData, serverId: value})}
                   required
+                  disabled={isLoadingServers || isSubmitting}
                 >
                   <SelectTrigger className={!formData.serverId ? 'border-red-200' : ''}>
-                    <SelectValue placeholder="Select server..." />
+                    <SelectValue placeholder={isLoadingServers ? "Loading servers..." : "Select server..."} />
                   </SelectTrigger>
                   <SelectContent>
-                    {servers.map(server => (
-                      <SelectItem key={server.id} value={server.id.toString()}>
-                        {server.name}
-                      </SelectItem>
-                    ))}
+                    {isLoadingServers ? (
+                      <div className="flex items-center justify-center p-4">
+                        <Spinner size="sm" />
+                      </div>
+                    ) : (
+                      servers.map(server => (
+                        <SelectItem key={server.id} value={server.id.toString()}>
+                          {server.name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -323,6 +362,7 @@ export default function Home() {
                   placeholder="e.g., TBL_LOGI_LOGS"
                   className={!formData.tableName.trim() ? 'border-red-200' : ''}
                   required
+                  disabled={isSubmitting}
                 />
               </div>
 
@@ -337,6 +377,7 @@ export default function Home() {
                       onCheckedChange={(checked) => 
                         setFormData({...formData, insertStatus: checked ? true : null})
                       }
+                      disabled={isSubmitting}
                     />
                     <label htmlFor="insert" className="text-xs">INSERT</label>
                   </div>
@@ -347,6 +388,7 @@ export default function Home() {
                       onCheckedChange={(checked) => 
                         setFormData({...formData, updateStatus: checked ? true : null})
                       }
+                      disabled={isSubmitting}
                     />
                     <label htmlFor="update" className="text-xs">UPDATE</label>
                   </div>
@@ -357,6 +399,7 @@ export default function Home() {
                       onCheckedChange={(checked) => 
                         setFormData({...formData, deleteStatus: checked ? true : null})
                       }
+                      disabled={isSubmitting}
                     />
                     <label htmlFor="delete" className="text-xs">DELETE</label>
                   </div>
@@ -370,6 +413,7 @@ export default function Home() {
                   value={formData.sysType}
                   onChange={(e) => setFormData({...formData, sysType: e.target.value})}
                   placeholder="e.g., ACLDATA, ACLAMB"
+                  disabled={isSubmitting}
                 />
               </div>
 
@@ -380,19 +424,28 @@ export default function Home() {
                   value={formData.messageError}
                   onChange={(e) => setFormData({...formData, messageError: e.target.value})}
                   placeholder="Any error messages or notes..."
+                  disabled={isSubmitting}
                 />
               </div>
 
               {/* Submit Button */}
               <div className="flex space-x-2">
-                <Button type="submit" className="w-full">
-                  {editingEntry ? 'Update' : 'Add'}
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <div className="flex items-center space-x-2">
+                      <Spinner size="sm" className="border-white border-t-transparent" />
+                      <span>{editingEntry ? 'Updating...' : 'Adding...'}</span>
+                    </div>
+                  ) : (
+                    editingEntry ? 'Update' : 'Add'
+                  )}
                 </Button>
                 {editingEntry && (
                   <Button 
                     type="button" 
                     variant="outline" 
                     onClick={cancelEdit}
+                    disabled={isSubmitting}
                   >
                     Cancel
                   </Button>
@@ -411,12 +464,20 @@ export default function Home() {
               <CardTitle>Entries for {new Date(selectedDate).toLocaleDateString()}</CardTitle>
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
                 <TabsList>
-                  <TabsTrigger value="all">All Servers ({entries.length})</TabsTrigger>
-                  {servers.map(server => (
-                    <TabsTrigger key={server.id} value={server.id.toString()}>
-                      {server.name} ({getFilteredEntries().filter(e => e.server.id === server.id).length})
-                    </TabsTrigger>
-                  ))}
+                  <TabsTrigger value="all" disabled={isLoadingEntries}>
+                    All Servers ({isLoadingEntries ? '...' : entries.length})
+                  </TabsTrigger>
+                  {isLoadingServers ? (
+                    <div className="flex items-center px-3 py-1">
+                      <Spinner size="sm" className="border-muted-foreground border-t-transparent" />
+                    </div>
+                  ) : (
+                    servers.map(server => (
+                      <TabsTrigger key={server.id} value={server.id.toString()} disabled={isLoadingEntries}>
+                        {server.name} ({isLoadingEntries ? '...' : getFilteredEntries().filter(e => e.server.id === server.id).length})
+                      </TabsTrigger>
+                    ))
+                  )}
                 </TabsList>
               </Tabs>
             </div>
@@ -437,7 +498,19 @@ export default function Home() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {getGroupedEntries().length === 0 ? (
+                  {isLoadingEntries ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-12">
+                        <div className="flex flex-col items-center space-y-4">
+                          <Spinner size="lg" />
+                          <div className="text-muted-foreground">
+                            <h3 className="text-lg font-medium mb-2">Loading entries...</h3>
+                            <p className="text-sm">Fetching your database operations</p>
+                          </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : getGroupedEntries().length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                         <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
