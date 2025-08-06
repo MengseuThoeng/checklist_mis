@@ -2,13 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useRouter } from 'next/navigation'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Calendar, Database, Edit, Trash2, Plus, CheckCircle, XCircle, Clock, LogOut, User } from 'lucide-react'
 import { toast, Toaster } from 'sonner'
@@ -30,13 +32,9 @@ type ChecklistEntry = {
   sysType: string | null
 }
 
-type GroupedChecklistEntry = ChecklistEntry & {
-  isFirstInGroup?: boolean
-  groupSize?: number
-}
-
 export default function Home() {
   const { data: session, status } = useSession()
+  const router = useRouter()
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [servers, setServers] = useState<Server[]>([])
   const [entries, setEntries] = useState<ChecklistEntry[]>([])
@@ -164,38 +162,6 @@ export default function Home() {
     return entries.filter(entry => entry.server.id.toString() === activeTab)
   }
 
-  // Group entries by server for Excel-style merged display
-  const getGroupedEntries = (): GroupedChecklistEntry[] => {
-    const filtered = getFilteredEntries()
-    if (activeTab !== 'all') return filtered // No grouping for individual servers
-    
-    // Group by server name
-    const grouped = filtered.reduce((groups: { [key: string]: ChecklistEntry[] }, entry) => {
-      const serverName = entry.server.name
-      if (!groups[serverName]) {
-        groups[serverName] = []
-      }
-      groups[serverName].push(entry)
-      return groups
-    }, {})
-    
-    // Convert to flat array with grouping info
-    const result: GroupedChecklistEntry[] = []
-    Object.entries(grouped)
-      .sort(([a], [b]) => a.localeCompare(b)) // Sort server names
-      .forEach(([, serverEntries]) => {
-        serverEntries.forEach((entry, index) => {
-          result.push({
-            ...entry,
-            isFirstInGroup: index === 0,
-            groupSize: serverEntries.length
-          })
-        })
-      })
-    
-    return result
-  }
-
   const handleSignOut = () => {
     signOut({ callbackUrl: '/auth/signin' })
   }
@@ -225,11 +191,8 @@ export default function Home() {
     )
   }
 
-  // Redirect to signin if not authenticated
-  if (status === 'unauthenticated' || !session) {
-    if (typeof window !== 'undefined') {
-      window.location.href = '/auth/signin'
-    }
+  // Don't render if not authenticated
+  if (!session) {
     return null
   }
 
@@ -369,7 +332,7 @@ export default function Home() {
                 <Input
                   value={formData.sysType}
                   onChange={(e) => setFormData({...formData, sysType: e.target.value})}
-                  placeholder="e.g., ACLDATA, ACLAMB"
+                  placeholder="e.g., PROD, TEST"
                 />
               </div>
 
@@ -426,6 +389,7 @@ export default function Home() {
               <Table>
                 <TableHeader className="sticky top-0 bg-white z-10 border-b">
                   <TableRow>
+                    <TableHead className="w-[120px] font-semibold">Time</TableHead>
                     <TableHead className="w-[140px] font-semibold">Server</TableHead>
                     <TableHead className="w-[200px] font-semibold">Table Name</TableHead>
                     <TableHead className="w-[80px] text-center font-semibold">INSERT</TableHead>
@@ -437,36 +401,29 @@ export default function Home() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {getGroupedEntries().length === 0 ? (
+                  {getFilteredEntries().length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                      <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
                         <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
                         <h3 className="text-lg font-medium mb-2">No entries found</h3>
                         <p className="text-sm">Add your first database operation entry using the form above</p>
                       </TableCell>
                     </TableRow>
                   ) : (
-                    getGroupedEntries().map((entry) => (
+                    getFilteredEntries().map((entry) => (
                       <TableRow key={entry.id} className="hover:bg-muted/50">
-                        {/* Server column - only show for first row in group when activeTab is 'all' */}
-                        {activeTab === 'all' ? (
-                          entry.isFirstInGroup ? (
-                            <TableCell 
-                              rowSpan={entry.groupSize} 
-                              className="border-r-2 border-gray-200 bg-gray-50/50 font-semibold align-top"
-                            >
-                              <Badge variant="outline" className="font-mono">
-                                {entry.server.name}
-                              </Badge>
-                            </TableCell>
-                          ) : null
-                        ) : (
-                          <TableCell>
-                            <Badge variant="outline" className="font-mono">
-                              {entry.server.name}
-                            </Badge>
-                          </TableCell>
-                        )}
+                        <TableCell className="font-mono text-sm">
+                          {new Date(entry.date).toLocaleTimeString('en-US', { 
+                            hour12: false,
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-mono">
+                            {entry.server.name}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="font-mono text-sm">
                           {entry.tableName}
                         </TableCell>
@@ -506,7 +463,7 @@ export default function Home() {
                         </TableCell>
                         <TableCell className="max-w-[300px]">
                           {entry.messageError && (
-                            <div className="text-sm break-words">
+                            <div className="text-sm text-red-600 bg-red-50 p-2 rounded break-words">
                               {entry.messageError}
                             </div>
                           )}
