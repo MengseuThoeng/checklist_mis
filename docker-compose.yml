@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # Main application
+  checklist-app:
+    build: .
+    container_name: checklist-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:./data/dev.db
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=your-super-secret-key-change-this-in-production
+    volumes:
+      # Mount database directory to persist data
+      - ./data:/app/data
+      # Mount prisma directory for database operations
+      - ./prisma:/app/prisma
+    depends_on:
+      - db-init
+    restart: unless-stopped
+    networks:
+      - checklist-network
+
+  # Database initialization service
+  db-init:
+    build: .
+    container_name: checklist-db-init
+    environment:
+      - DATABASE_URL=file:./data/dev.db
+    volumes:
+      - ./data:/app/data
+      - ./prisma:/app/prisma
+      - ./scripts:/app/scripts
+    command: >
+      sh -c "
+        echo 'Setting up database...' &&
+        npx prisma db push --force-reset &&
+        echo 'Seeding database...' &&
+        npx tsx prisma/seed.ts &&
+        echo 'Creating admin user...' &&
+        npx tsx scripts/create-admin.ts &&
+        echo 'Database setup complete!'
+      "
+    networks:
+      - checklist-network
+
+  # Optional: Database backup service
+  db-backup:
+    image: alpine:latest
+    container_name: checklist-backup
+    volumes:
+      - ./data:/data
+      - ./backups:/backups
+    command: >
+      sh -c "
+        while true; do
+          echo 'Creating database backup...'
+          cp /data/dev.db /backups/backup-$(date +%Y%m%d-%H%M%S).db
+          echo 'Backup created successfully'
+          # Backup every 24 hours
+          sleep 86400
+        done
+      "
+    restart: unless-stopped
+    networks:
+      - checklist-network
+
+networks:
+  checklist-network:
+    driver: bridge
+
+volumes:
+  checklist-data:

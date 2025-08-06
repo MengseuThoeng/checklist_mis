@@ -1,0 +1,74 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// User model for authentication
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String   // Hashed password
+  name      String?
+  role      String   @default("user") // "admin" or "user"
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  sessions  Session[]
+  
+  @@map("users")
+}
+
+// Session model for NextAuth
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       Int
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("sessions")
+}
+
+// Server model - for your 6 servers
+model Server {
+  id       Int    @id @default(autoincrement())
+  name     String @unique // REPORT_36.2, REPORT_154, etc.
+  
+  // Relations
+  checks   ChecklistEntry[]
+  
+  @@map("servers")
+}
+
+// Daily checklist entries
+model ChecklistEntry {
+  id          Int      @id @default(autoincrement())
+  date        DateTime // The checklist date
+  server      Server   @relation(fields: [serverId], references: [id])
+  serverId    Int
+  tableName   String   // TBL_LOGI_LOGS, TBLTRANSACTIONSSUB, etc.
+  
+  // Operation statuses
+  insertStatus Boolean? // Y/N for INSERT
+  updateStatus Boolean? // Y/N for UPDATE  
+  deleteStatus Boolean? // Y/N for DELETE
+  
+  // Error information
+  messageError String? // Error messages
+  sysType      String? // ACLTFE, ACLAMB, etc.
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([date, serverId, tableName]) // One entry per day/server/table
+  @@map("checklist_entries")
+}
